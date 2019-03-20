@@ -45,13 +45,13 @@ resources:
 - name: gpdb_main_src  # used for yml task files
   type: git
   source:
-    branch: master
+    branch: tpcds-explain-test
     ignore_paths:
     - README.md
     - LICENSE
     - COPYRIGHT
     - .gitignore
-    uri: https://github.com/greenplum-db/gpdb
+    uri: https://github.com/hardikar/gpdb
 - name: gpdb_baseline_src  # used for baseline build
   type: git
   source:
@@ -102,6 +102,22 @@ resources:
     region_name: us-west-2
     secret_access_key: {{s3_secret_access_key}}
     versioned_file: orca_src.tar.gz
+- name: benchmark_test_suite
+  type: s3
+  source:
+    access_key_id: {{s3_access_key_id}}
+    bucket: {{gporca-concourse-bucket-dev}}
+    region_name: us-west-2
+    secret_access_key: {{s3_secret_access_key}}
+    versioned_file: tpcds_partitioned_suite_1tb.tar.gz # Fix this name, convert it to config??
+- name: benchmark_output
+  type: s3
+  source:
+    access_key_id: {{s3_access_key_id}}
+    bucket: {{gporca-concourse-bucket-dev}}
+    region_name: us-west-2
+    secret_access_key: {{s3_secret_access_key}}
+    versioned_file: benchmark_output.tar.gz
 resource_types: []
 jobs:
 - name: xerces_centos5
@@ -238,3 +254,77 @@ jobs:
   - put: bin_gpdb_baseline_centos6
     params:
       file: package_tarball/bin_gpdb.tar.gz
+
+- name: test_explain_benchmark
+  max_in_flight: 1
+  plan:
+  - aggregate:
+    - get: gporca-commits-to-test
+      passed:
+      - build_gpdb
+      trigger: true
+    - get: bin_orca
+      passed:
+      - build_gpdb
+      resource: bin_orca_centos5_release
+    - get: bin_xerces
+      passed:
+      - build_gpdb
+      resource: bin_xerces_centos5
+    - get: bin_gpdb
+      passed:
+      - build_gpdb
+      resource: bin_gpdb_centos6
+    - get: gpdb_main_src
+      # passed:
+      # - build_gpdb
+      params:
+        submodules: none
+    - get: gpdb_tarball
+      passed:
+      - build_gpdb
+    - get: benchmark_test_suite
+  - task: explain_benchmark
+    file: gpdb_main_src/concourse/tasks/untar_test_with_orca.yml
+    params:
+      ACTION: test_explain_benchmark
+    timeout: 90m
+  - put: benchmark_output
+    params:
+      file: icg_output/benchmark_run_ouput.tar.gz
+
+      # - name: test_explain_benchmark
+      #   plan:
+      #   - aggregate:
+      #     - get: bin_orca
+      #       resource: bin_orca_centos5_release
+      #       params:
+      #         globs:
+      #           - bin_orca_centos5_release.tar.gz
+      #       passed:
+      #       - build_gpdb
+      #     - get: bin_xerces
+      #       resource: bin_xerces_centos5
+      #       passed:
+      #       - build_gpdb
+      #     - get: bin_gpdb
+      #       resource: bin_gpdb_centos6
+      #       passed:
+      #       - build_gpdb
+      #       trigger: true
+      #     - get: gpdb_src
+      #       passed:
+      #       - build_gpdb
+      #       params:
+      #         submodules: none
+      #   - task: icg_with_orca
+      #     timeout: 64m
+      #     file: gpdb_src/concourse/tasks/test_with_orca.yml
+      #     on_failure:
+      #       aggregate:
+      #       - put: regression_diffs
+      #         params:
+      #           file: icg_output/regression.diffs
+      #       - put: regression_out
+      #         params:
+      #           file: icg_output/regression.out
