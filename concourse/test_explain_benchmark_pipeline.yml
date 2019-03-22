@@ -238,16 +238,11 @@ jobs:
 - name: build_gpdb_baseline
   plan:
   - aggregate:
-    - get: gporca-commits-to-test
-      passed:
-      - orca_centos5_release
-      trigger: true
-      version: every
     - get: bin_orca
+      resource: bin_orca_baseline_centos5_release
       passed:
       - orca_baseline_centos5_release
-      resource: bin_orca_baseline_centos5_release
-      version: every
+      trigger: true
     - get: bin_xerces
       resource: bin_xerces_centos5
       passed:
@@ -284,8 +279,8 @@ jobs:
       - build_gpdb
       resource: bin_gpdb_centos6
     - get: gpdb_main_src
-      # passed:
-      # - build_gpdb
+      passed:
+      - build_gpdb
       params:
         submodules: none
     - get: gpdb_tarball
@@ -327,14 +322,36 @@ jobs:
       params:
         submodules: none
     - get: gpdb_main_src
-      # passed:
-      # - build_gpdb_baseline
+      passed:
+      - build_gpdb_baseline
       params:
         submodules: none
     - get: benchmark_test_suite
-  - task: icg_with_orca
+  - task: explain_benchmark_baseline
     timeout: 64m
     file: gpdb_main_src/concourse/tasks/test_explain_benchmark_with_orca.yml
   - put: benchmark_output_baseline
     params:
       file: icg_output/benchmark_run_ouput.tar.gz
+- name: diff_benchmark_results_with_baseline
+  plan:
+  - aggregate:
+    - get: gpdb_main_src
+      passed:
+      - test_explain_benchmark
+      - test_explain_benchmark_baseline
+      trigger: true
+      params:
+        submodules: none
+    - get: benchmark_output
+      passed:
+      - test_explain_benchmark
+    - get: benchmark_output_baseline
+      passed:
+      - test_explain_benchmark_baseline
+  - task: diff_benchmark_results_with_baseline
+    timeout: 64m
+    file: gpdb_main_src/concourse/tasks/diff_benchmark_results_with_baseline.yml
+    #- put: benchmark_output_baseline
+    #  params:
+    #    file: icg_output/benchmark_run_ouput.tar.gz
