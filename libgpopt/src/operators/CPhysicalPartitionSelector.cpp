@@ -791,7 +791,28 @@ CPhysicalPartitionSelector::PrsDerive
 	)
 	const
 {
-	return PrsDerivePassThruOuter(mp, exprhdl);
+
+    // we needed to somehow determine if we are SPE vs DPE. SPE => rescannable
+    // DPE => not rescannable (refer ExecReScanPartitionSelector())
+
+    // TODO: why is this function called twice, once with pgexprs as NULL and pexprs
+    // as NULL?
+    COperator *op = exprhdl.Pgexpr() ? exprhdl.Pgexpr()->Pop() : exprhdl.Pexpr()->Pop();
+    CPhysicalPartitionSelector *popSelector = CPhysicalPartitionSelector::PopConvert(op);
+    CPartInfo *ppartinfo = exprhdl.DerivePartitionInfo(0);
+    BOOL fNeedSequence = ppartinfo->FContainsScanId(popSelector->ScanId());
+    if (!fNeedSequence)
+    {
+      // DPE => not rewindable/rescannable.
+      CRewindabilitySpec *prs = exprhdl.Pdpplan(0 /*child_index*/)->Prs();
+      return GPOS_NEW(mp) CRewindabilitySpec(CRewindabilitySpec::ErtNone, prs->Emht());
+    }
+    // Static Partition Elimination
+    // TODO: Should we even delegate to the child here? Shouldn't we just return
+    // rescannable/rewindable?
+    // TODO: Understand the difference b/w rescannable and rewindable.
+    // TODO: Do we change PrsRequired()?
+    return PrsDerivePassThruOuter(mp, exprhdl);
 }
 
 //---------------------------------------------------------------------------
